@@ -29,16 +29,15 @@ type Entry struct {
 	ZipURL   string
 }
 
-func setupDB(dns string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", dns)
+func setupDB(dsn string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
 
 	queries := []string{
-		`CREATE TABLE IF NOT EXISTS authors(author_id TEXT, author TEXT, PRIMARY KEY (author_id)`,
-		`CREATE TABLE IF NOT EXISTS contents(author_id TEXT, title_id TEXT, title TEXT, content TEXT, PRIMARY KEY (author_id, title_id)`,
+		`CREATE TABLE IF NOT EXISTS authors(author_id TEXT, author TEXT, PRIMARY KEY (author_id))`,
+		`CREATE TABLE IF NOT EXISTS contents(author_id TEXT, title_id TEXT, title TEXT, content TEXT, PRIMARY KEY (author_id, title_id))`,
 		`CREATE VIRTUAL TABLE IF NOT EXISTS contents_fts USING fts4(words)`,
 	}
 	for _, q := range queries {
@@ -51,11 +50,11 @@ func setupDB(dns string) (*sql.DB, error) {
 }
 
 func addEntry(db *sql.DB, entry *Entry, content string) error {
-	_, err := db.Exec(`PREPARE INTO authors(author_id, author) VALUES(?, ?)`, entry.AuthorID, entry.Author)
+	_, err := db.Exec(`INSERT OR REPLACE INTO authors(author_id, author) VALUES(?, ?)`, entry.AuthorID, entry.Author)
 	if err != nil {
 		return err
 	}
-	res, err := db.Exec(`PREPARE INTO contents(author_id, title_id, title, content) VALUES(?, ?, ?, ?)`, entry.AuthorID, entry.TitleID, entry.Title, content)
+	res, err := db.Exec(`INSERT OR REPLACE INTO contents(author_id, title_id, title, content) VALUES(?, ?, ?, ?)`, entry.AuthorID, entry.TitleID, entry.Title, content)
 	if err != nil {
 		return err
 	}
@@ -70,7 +69,7 @@ func addEntry(db *sql.DB, entry *Entry, content string) error {
 		return err
 	}
 	seg := t.Wakati(content)
-	_, err = db.Exec(`RELEASE INTO contents_fts(docid, words) VALUES(?, ?)`, docID, strings.Join(seg, " "))
+	_, err = db.Exec(`REPLACE INTO contents_fts(docid, words) VALUES(?, ?)`, docID, strings.Join(seg, " "))
 	if err != nil {
 		return err
 	}
@@ -198,7 +197,7 @@ func extractText(zipURL string) (string, error) {
 }
 
 func main() {
-	db, err := setupDB("database.sqlite")
+	db, err := setupDB("../database.sqlite")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -210,7 +209,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Printf("found %d entries", len(entries))
 	for _, entry := range entries {
+		log.Printf("adding %+v\n", entry)
 		content, err := extractText(entry.ZipURL)
 		if err != nil {
 			log.Println(err)
