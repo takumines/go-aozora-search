@@ -1,8 +1,13 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
+	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/text/encoding/japanese"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -98,6 +103,47 @@ func findAuthorAndZIP(siteURL string) (string, string) {
 	return author, zipURL
 }
 
+func extractText(zipURL string) (string, error) {
+	resp, err := http.Get(zipURL)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	// zipファイルの内容読み込み
+	r, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
+	if err != nil {
+		return "", err
+	}
+	// 読み込んだファイルの中から拡張子が.txtのファイルを探す
+	for _, file := range r.File {
+		if path.Ext(file.Name) == ".txt" {
+			// 見つかったらファイルの内容を読み込む
+			f, err := file.Open()
+			if err != nil {
+				return "", err
+			}
+			b, err := io.ReadAll(f)
+			f.Close()
+			if err != nil {
+				return "", err
+			}
+			// ShiftJISからUTF-8に変換する
+			b, err = japanese.ShiftJIS.NewDecoder().Bytes(b)
+			if err != nil {
+				return "", err
+			}
+			return string(b), nil
+		}
+	}
+
+	return "", errors.New("content not found")
+}
+
 func main() {
 	listURL := "https://www.aozora.gr.jp/index_pages/person879.html"
 
@@ -106,6 +152,12 @@ func main() {
 		log.Fatal(err)
 	}
 	for _, entry := range entries {
-		fmt.Println(entry.Title, entry.ZipURL)
+		content, err := extractText(entry.ZipURL)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		fmt.Println(entry.SiteURL)
+		fmt.Println(content)
 	}
 }
