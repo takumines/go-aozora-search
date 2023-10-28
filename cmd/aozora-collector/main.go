@@ -77,6 +77,8 @@ func addEntry(db *sql.DB, entry *Entry, content string) error {
 	return nil
 }
 
+var pageURLFormat = "https://www.aozora.gr.jp/cards/%s/card%s.html"
+
 func findEntries(siteURL string) ([]Entry, error) {
 	resp, err := http.Get(siteURL)
 	if err != nil {
@@ -97,7 +99,7 @@ func findEntries(siteURL string) ([]Entry, error) {
 			return
 		}
 		title := elem.Text()
-		pageURL := fmt.Sprintf("https://www.aozora.gr.jp/cards/%s/card%s.html",
+		pageURL := fmt.Sprintf(pageURLFormat,
 			token[1], token[2])
 		author, zipURL := findAuthorAndZIP(pageURL)
 		if zipURL != "" {
